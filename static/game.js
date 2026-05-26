@@ -1,17 +1,38 @@
+const socket = io();
+
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
 const bg = new Image();
 bg.src = "/static/images/background.png";
 
+const runningBg = new Image();
+runningBg.src = "/static/images/running_background.png";
+
+let myColor = null;
+
+if (MY_USER_ID === PLAYER1_ID) {
+    myColor = "blue";
+}
+
+if (MY_USER_ID === PLAYER2_ID) {
+    myColor = "red";
+}
+
+socket.emit("join_game_room", {
+    room: ROOM_CODE,
+    username: MY_USERNAME
+});
+
+let gameState = "pitching";
+
 let x = 100;
 let y = 520;
 
-let speed = 8;
+let speed = 2;
 let angle = 5;
 
 let ballMoving = false;
-let hitBallMoving = false;
 
 let groundY = 620;
 let resetCounter = 0;
@@ -21,11 +42,92 @@ let pitchAngleAtThrow = 5;
 
 let swingChosen = false;
 let swingResult = "";
+let hitDifference = 99;
+
 let hitterX = 1330;
 
 let strikes = 0;
 let balls = 0;
 let outs = 0;
+
+let blueScore = 0;
+let redScore = 0;
+
+let currentHitter = "red";
+
+let runnerY = 650;
+let runPresses = 0;
+let pressesNeeded = 20;
+let runTimer = 0;
+let runCountdown = 180;
+let runningStarted = false;
+
+function isMyTurnToPitch() {
+    return (currentHitter === "red" && myColor === "blue") ||
+           (currentHitter === "blue" && myColor === "red");
+}
+
+function isMyTurnToHit() {
+    return currentHitter === myColor;
+}
+
+function getBallSpeed() {
+    if (speed === 1) return 9;
+    if (speed === 2) return 13;
+    if (speed === 3) return 17;
+}
+
+socket.on("receive_pitch", function(data) {
+    resetBall();
+    speed = data.speed;
+    angle = data.angle;
+    pitchAngleAtThrow = data.angle;
+    resultText = "";
+    ballMoving = true;
+});
+
+socket.on("receive_swing", function(data) {
+    if (!ballMoving || swingChosen) return;
+
+    let swingAngle = data.swingAngle;
+    swingChosen = true;
+
+    if (swingAngle === 0) {
+        swingResult = "NO_SWING";
+    } else {
+        let convertedSwing = swingAngle * 2;
+        let difference = Math.abs(pitchAngleAtThrow - convertedSwing);
+        hitDifference = difference;
+
+        let impossiblePitch =
+            (angle === 10 && speed === 3) ||
+            (angle === 10 && speed === 2) ||
+            (angle === 9 && speed === 3) ||
+            (angle === 0 && speed === 3) ||
+            (angle === 0 && speed === 1) ||
+            (angle === 0 && speed === 2) ||
+            (angle === 1 && speed === 1);
+
+        let ballTooEarly = x < canvas.width / 2;
+
+        if (impossiblePitch) {
+            swingResult = "MISS";
+        } else if (ballTooEarly) {
+            swingResult = "TOO_EARLY";
+            resultText = "TOO EARLY!";
+        } else if (difference <= 1.5) {
+            swingResult = "HIT";
+        } else {
+            swingResult = "MISS";
+        }
+    }
+});
+
+socket.on("receive_run_press", function() {
+    if (gameState === "running" && runningStarted) {
+        runPresses++;
+    }
+});
 
 function drawPlayers() {
     ctx.fillStyle = "blue";
@@ -49,46 +151,154 @@ function drawPlayers() {
     ctx.lineWidth = 1;
 }
 
-function drawUI() {
-    ctx.fillStyle = "white";
-    ctx.font = "30px Arial";
+function drawRoomAndNames() {
 
-    ctx.fillText("Pitcher Controls", 50, 60);
-    ctx.fillText("Q / E = Angle", 50, 100);
-    ctx.fillText("A / D = Speed", 50, 140);
-    ctx.fillText("SPACE = Throw", 50, 180);
+    // ROOM ID
+    // ROOM ID
+    ctx.fillStyle = "rgba(0, 0, 0, 0.65)";
+    ctx.fillRect(650, 20, 320, 55);
 
-    ctx.fillText("Angle: " + angle, 50, 240);
-    ctx.fillText("Speed: " + speed, 50, 280);
+    ctx.strokeStyle = "white";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(650, 20, 320, 55);
 
     ctx.fillStyle = "yellow";
-    ctx.fillText("0 = No Swing", 50, 340);
-    ctx.fillText("1-5 = Swing", 50, 380);
+    ctx.font = "30px Arial";
+    ctx.fillText("Room: " + ROOM_CODE, 700, 57);
+
+
+    // BLUE PLAYER NAME
+    ctx.fillStyle = "rgba(0, 0, 0, 0.65)";
+    ctx.fillRect(120, 640, 220, 45);
+
+    ctx.strokeStyle = "white";
+    ctx.strokeRect(120, 640, 220, 45);
 
     ctx.fillStyle = "white";
-    ctx.font = "35px Arial";
-    ctx.fillText("Strikes: " + strikes, 1200, 60);
-    ctx.fillText("Balls: " + balls, 1200, 110);
-    ctx.fillText("Outs: " + outs, 1200, 160);
+    ctx.font = "26px Arial";
+    ctx.fillText(PLAYER1_NAME, 140, 672);
 
+
+    // RED PLAYER NAME
+    ctx.fillStyle = "rgba(0, 0, 0, 0.65)";
+    ctx.fillRect(1280, 640, 260, 45);
+
+    ctx.strokeStyle = "white";
+    ctx.strokeRect(1280, 640, 260, 45);
+
+    ctx.fillStyle = "white";
+    ctx.font = "26px Arial";
+    ctx.fillText(PLAYER2_NAME, 1300, 672);
+}
+function drawUI() {
+    // LEFT BOX: only pitcher sees angle/speed
+    ctx.fillStyle = "rgba(0, 0, 0, 0.65)";
+    ctx.fillRect(40, 45, 300, 175);
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(40, 45, 300, 175);
+
+    if (isMyTurnToPitch()) {
+        ctx.fillStyle = "white";
+        ctx.font = "30px Arial";
+        ctx.fillText("Angle:", 65, 95);
+        ctx.fillText("Speed:", 65, 145);
+
+        ctx.fillStyle = "yellow";
+        ctx.font = "36px Arial";
+        ctx.fillText(angle, 210, 95);
+        ctx.fillText(speed, 210, 145);
+
+        ctx.fillStyle = "lime";
+        ctx.font = "24px Arial";
+        ctx.fillText("Your turn: Pitch", 65, 195);
+    } else if (isMyTurnToHit()) {
+        ctx.fillStyle = "lime";
+        ctx.font = "30px Arial";
+        ctx.fillText("Your turn: Hit", 65, 95);
+
+        ctx.fillStyle = "yellow";
+        ctx.font = "24px Arial";
+        ctx.fillText("0 = No Swing", 65, 145);
+        ctx.fillText("1-5 = Swing", 65, 185);
+    } else {
+        ctx.fillStyle = "orange";
+        ctx.font = "28px Arial";
+        ctx.fillText("Waiting...", 65, 120);
+    }
+
+    // RESULT BOX
+    if (resultText !== "") {
+        ctx.fillStyle = "rgba(0, 0, 0, 0.65)";
+        ctx.fillRect(570, 55, 560, 90);
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(570, 55, 560, 90);
+
+        ctx.fillStyle = "yellow";
+        ctx.font = "52px Arial";
+        ctx.fillText(resultText, 610, 115);
+    }
+
+    // RIGHT BOX: score/count
+    ctx.fillStyle = "rgba(0, 0, 0, 0.65)";
+    ctx.fillRect(1190, 45, 330, 285);
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(1190, 45, 330, 285);
+
+    ctx.fillStyle = "white";
+    ctx.font = "30px Arial";
+    ctx.fillText("Strikes:", 1215, 90);
+    ctx.fillText("Balls:", 1215, 135);
+    ctx.fillText("Outs:", 1215, 180);
+    ctx.fillText("Blue Score:", 1215, 240);
+    ctx.fillText("Red Score:", 1215, 290);
+
+    ctx.fillStyle = "yellow";
+    ctx.font = "34px Arial";
+    ctx.fillText(strikes, 1435, 90);
+    ctx.fillText(balls, 1435, 135);
+    ctx.fillText(outs, 1435, 180);
+    ctx.fillText(blueScore, 1435, 240);
+    ctx.fillText(redScore, 1435, 290);
+
+    // STRIKE ZONE
     ctx.strokeStyle = "yellow";
     ctx.lineWidth = 3;
     ctx.strokeRect(1300, 420, 80, 140);
     ctx.lineWidth = 1;
-
-    ctx.fillStyle = "yellow";
-    ctx.font = "45px Arial";
-    ctx.fillText(resultText, 700, 100);
 }
-
 function resetBall() {
     x = 100;
     y = 520;
     ballMoving = false;
-    hitBallMoving = false;
     resetCounter = 0;
     swingChosen = false;
     swingResult = "";
+    hitDifference = 99;
+}
+
+function addPoint(points) {
+    if (currentHitter === "blue") {
+        blueScore += points;
+    } else {
+        redScore += points;
+    }
+}
+
+function switchRoles() {
+    if (currentHitter === "red") {
+        currentHitter = "blue";
+        resultText = "SWITCH! BLUE HITS";
+    } else {
+        currentHitter = "red";
+        resultText = "SWITCH! RED HITS";
+    }
+
+    strikes = 0;
+    balls = 0;
+    outs = 0;
 }
 
 function checkCountRules() {
@@ -104,63 +314,172 @@ function checkCountRules() {
         strikes = 0;
         balls = 0;
     }
+
+    if (outs >= 3) {
+        switchRoles();
+    }
+}
+
+function startRunningChallenge() {
+    gameState = "running";
+    runnerY = 650;
+    runPresses = 0;
+
+    runCountdown = 180;
+    runningStarted = false;
+
+    if (hitDifference <= 0.5) {
+        pressesNeeded = 12;
+        runTimer = 360;
+    } else if (hitDifference <= 1) {
+        pressesNeeded = 18;
+        runTimer = 420;
+    } else {
+        pressesNeeded = 24;
+        runTimer = 480;
+    }
+}
+
+function drawRunningScreen() {
+    ctx.drawImage(runningBg, 0, 0, canvas.width, canvas.height);
+
+    ctx.fillStyle = currentHitter === "blue" ? "blue" : "red";
+    ctx.fillRect(760, runnerY, 45, 90);
+    ctx.beginPath();
+    ctx.arc(782, runnerY - 20, 24, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = "rgba(0, 0, 0, 0.70)";
+    ctx.fillRect(40, 40, 540, 270);
+    ctx.strokeStyle = "white";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(40, 40, 540, 270);
+
+    ctx.fillStyle = "white";
+    ctx.font = "34px Arial";
+    ctx.fillText("RUN CHALLENGE", 70, 90);
+    ctx.fillText("Press R " + pressesNeeded + " times", 70, 145);
+
+    if (!runningStarted) {
+        let count = Math.ceil(runCountdown / 60);
+
+        ctx.fillStyle = "yellow";
+        ctx.font = "50px Arial";
+        ctx.fillText("Start in: " + count, 70, 225);
+
+        runCountdown--;
+
+        if (runCountdown <= 0) {
+            runningStarted = true;
+            resultText = "GO!";
+        }
+
+        return;
+    }
+
+    ctx.fillText("Presses: " + runPresses, 70, 205);
+    ctx.fillText("Time: " + Math.ceil(runTimer / 60), 70, 260);
+
+    runnerY = 650 - (runPresses / pressesNeeded) * 420;
+    runTimer--;
+
+    if (runPresses >= pressesNeeded) {
+        addPoint(1);
+        resultText = "SAFE! +1";
+        gameState = "pitching";
+        resetBall();
+    }
+
+    if (runTimer <= 0) {
+        outs++;
+        resultText = "OUT!";
+        checkCountRules();
+        gameState = "pitching";
+        resetBall();
+    }
 }
 
 function animate() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    if (gameState === "running") {
+        drawRunningScreen();
+        requestAnimationFrame(animate);
+        return;
+    }
+
     ctx.drawImage(bg, 0, 0, canvas.width, canvas.height);
 
     drawPlayers();
     drawUI();
+    drawRoomAndNames();
 
     if (ballMoving) {
-        x += speed;
+        x += getBallSpeed();
 
         let progress = (x - 100) / (hitterX - 100);
-
         let startY = 520;
-
-        // angle controls pitch height
         let targetY = 620 - angle * 35;
-
-        // weak pitch drops more
-        let drop = (10 - speed) * 12 * progress * progress;
-
-        // arc effect
+        let drop = (4 - speed) * 20 * progress * progress;
         let arc = Math.sin(progress * Math.PI) * angle * 25;
 
         y = startY + (targetY - startY) * progress - arc + drop;
 
-        // weak pitch hits ground
         if (y >= groundY) {
             y = groundY;
             ballMoving = false;
-            resultText = "BALL!";
-            balls++;
+
+            if (swingChosen) {
+                strikes++;
+                resultText = "STRIKE!";
+            } else {
+                balls++;
+                resultText = "BALL!";
+            }
+
             checkCountRules();
             resetCounter = 60;
         }
 
-        // too high pitch flies away
         if (y < -100) {
             ballMoving = false;
-            resultText = "BALL!";
-            balls++;
+
+            if (swingChosen) {
+                strikes++;
+                resultText = "STRIKE!";
+            } else {
+                balls++;
+                resultText = "BALL!";
+            }
+
             checkCountRules();
             resetCounter = 60;
         }
 
-        // ball reached hitter
         if (x >= hitterX && ballMoving) {
             ballMoving = false;
 
             let inStrikeZone = y >= 420 && y <= 560;
 
             if (swingChosen && swingResult === "HIT") {
-                resultText = "HIT!";
-                hitBallMoving = true;
                 strikes = 0;
                 balls = 0;
+
+                if (hitDifference <= 0.2) {
+                    addPoint(2);
+                    resultText = "HOME RUN! +2";
+                    resetCounter = 120;
+                } else {
+                    resultText = "HIT! RUN!";
+                    startRunningChallenge();
+                }
+            }
+
+            else if (swingChosen && swingResult === "TOO_EARLY") {
+                strikes++;
+                resultText = "TOO EARLY!";
+                checkCountRules();
+                resetCounter = 60;
             }
 
             else if (swingChosen && swingResult === "MISS") {
@@ -185,15 +504,6 @@ function animate() {
         }
     }
 
-    if (hitBallMoving) {
-        x -= 14;
-        y -= 8;
-
-        if (x < 100 || y < -100) {
-            resetBall();
-        }
-    }
-
     ctx.beginPath();
     ctx.arc(x, y, 10, 0, Math.PI * 2);
     ctx.fillStyle = "white";
@@ -201,7 +511,7 @@ function animate() {
     ctx.strokeStyle = "black";
     ctx.stroke();
 
-    if (!ballMoving && !hitBallMoving && resetCounter > 0) {
+    if (!ballMoving && resetCounter > 0) {
         resetCounter--;
 
         if (resetCounter <= 0) {
@@ -213,45 +523,48 @@ function animate() {
 }
 
 document.addEventListener("keydown", function(event) {
-    if (event.key === "q" || event.key === "Q") {
-        if (angle > 0) angle--;
+    if (gameState === "running") {
+        if (isMyTurnToHit() && runningStarted && (event.key === "r" || event.key === "R")) {
+            socket.emit("run_press", {
+                room: ROOM_CODE
+            });
+        }
+        return;
     }
 
-    if (event.key === "e" || event.key === "E") {
-        if (angle < 10) angle++;
+    if (isMyTurnToPitch()) {
+        if (event.key === "q" || event.key === "Q") {
+            if (angle > 0) angle--;
+        }
+
+        if (event.key === "e" || event.key === "E") {
+            if (angle < 10) angle++;
+        }
+
+        if (event.key === "a" || event.key === "A") {
+            if (speed > 1) speed--;
+        }
+
+        if (event.key === "d" || event.key === "D") {
+            if (speed < 3) speed++;
+        }
+
+        if (event.code === "Space") {
+            socket.emit("pitch", {
+                room: ROOM_CODE,
+                speed: speed,
+                angle: angle
+            });
+        }
     }
 
-    if (event.key === "a" || event.key === "A") {
-        if (speed > 1) speed--;
-    }
-
-    if (event.key === "d" || event.key === "D") {
-        if (speed < 15) speed++;
-    }
-
-    if (event.code === "Space") {
-        resetBall();
-        ballMoving = true;
-        pitchAngleAtThrow = angle;
-        resultText = "";
-    }
-
-    if (event.key >= "0" && event.key <= "5") {
-        if (ballMoving && !swingChosen) {
-            let swingAngle = Number(event.key);
-            swingChosen = true;
-
-            if (swingAngle === 0) {
-                swingResult = "NO_SWING";
-            } else {
-                let convertedSwing = swingAngle * 2;
-                let difference = Math.abs(pitchAngleAtThrow - convertedSwing);
-
-                if (difference <= 1.5) {
-                    swingResult = "HIT";
-                } else {
-                    swingResult = "MISS";
-                }
+    if (isMyTurnToHit()) {
+        if (event.key >= "0" && event.key <= "5") {
+            if (ballMoving && !swingChosen) {
+                socket.emit("swing", {
+                    room: ROOM_CODE,
+                    swingAngle: Number(event.key)
+                });
             }
         }
     }

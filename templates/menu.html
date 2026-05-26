@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Menu - Baseball Duel</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='login.css') }}">
+</head>
+<body>
+
+<div class="auth-box">
+    <h1>Welcome, {{ username }}</h1>
+
+    {% with messages = get_flashed_messages() %}
+        {% if messages %}
+            {% for message in messages %}
+                <p class="message">{{ message }}</p>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <a href="/create_room">Create Room</a>
+
+    <form method="POST" action="/join_room">
+        <input type="text" name="room_code" placeholder="Enter Room Code" required>
+        <button type="submit">Join Room</button>
+    </form>
+
+    <a href="/logout">Logout</a>
+</div>
+
+</body>
+</html>

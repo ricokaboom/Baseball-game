@@ -8,6 +8,21 @@
 
 <canvas id="gameCanvas" width="1600" height="900"></canvas>
 
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+
+<script>
+    const ROOM_CODE = "{{ room_code }}";
+
+    const MY_USER_ID = {{ session["user_id"] }};
+    const MY_USERNAME = "{{ username }}";
+
+    const PLAYER1_ID = {{ room.player1_id }};
+    const PLAYER2_ID = {{ room.player2_id if room.player2_id else "null" }};
+
+    const PLAYER1_NAME = "{{ room.player1_name }}";
+    const PLAYER2_NAME = "{{ room.player2_name if room.player2_name else 'Waiting...' }}";
+</script>
+
 <script src="/static/game.js"></script>
 
 </body>

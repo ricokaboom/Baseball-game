@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Login - Baseball Duel</title>
+    <link rel="stylesheet" href="/static/login.css">
+</head>
+<body>
+
+<div class="auth-box">
+    <h1>Baseball Duel Login</h1>
+
+    {% with messages = get_flashed_messages() %}
+        {% if messages %}
+            {% for message in messages %}
+                <p class="message">{{ message }}</p>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <form method="POST">
+        <input type="text" name="username" placeholder="Username" required>
+        <input type="password" name="password" placeholder="Password" required>
+
+        <button type="submit">Login</button>
+    </form>
+
+    <a class="button" href="/register">Create Account</a>
+</div>
+
+</body>
+</html>
