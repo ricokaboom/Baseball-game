@@ -5,11 +5,7 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="91631ac9-3823-4ec5-b033-b7cf2bb506aa" name="Changes" comment="adding baseball rules">
-      <change afterPath="$PROJECT_DIR$/static/images/running_background.png" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/static/login.css" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/templates/login.html" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/templates/menu.html" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/templates/register.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/requirements.txt" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app.py" beforeDir="false" afterPath="$PROJECT_DIR$/app.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/static/game.js" beforeDir="false" afterPath="$PROJECT_DIR$/static/game.js" afterDir="false" />

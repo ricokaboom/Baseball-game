@@ -11,11 +11,16 @@ app.secret_key = "change-this-secret-key"
 socketio = SocketIO(app, cors_allowed_origins="*")
 
 DB_NAME = "users.db"
-rooms = {}
+
+
+def get_db():
+    conn = sqlite3.connect(DB_NAME)
+    conn.row_factory = sqlite3.Row
+    return conn
 
 
 def init_db():
-    conn = sqlite3.connect(DB_NAME)
+    conn = get_db()
     cursor = conn.cursor()
 
     cursor.execute("""
@@ -24,6 +29,16 @@ def init_db():
             username TEXT UNIQUE NOT NULL,
             email TEXT UNIQUE NOT NULL,
             password_hash TEXT NOT NULL
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS rooms (
+            room_code TEXT PRIMARY KEY,
+            player1_id INTEGER,
+            player1_name TEXT,
+            player2_id INTEGER,
+            player2_name TEXT
         )
     """)
 
@@ -48,7 +63,7 @@ def register():
         password_hash = generate_password_hash(password)
 
         try:
-            conn = sqlite3.connect(DB_NAME)
+            conn = get_db()
             cursor = conn.cursor()
 
             cursor.execute(
@@ -74,8 +89,7 @@ def login():
         username = request.form["username"]
         password = request.form["password"]
 
-        conn = sqlite3.connect(DB_NAME)
-        conn.row_factory = sqlite3.Row
+        conn = get_db()
         cursor = conn.cursor()
 
         cursor.execute("SELECT * FROM users WHERE username = ?", (username,))
@@ -107,12 +121,22 @@ def create_room():
 
     room_code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=4))
 
-    rooms[room_code] = {
-        "player1_id": session["user_id"],
-        "player1_name": session["username"],
-        "player2_id": None,
-        "player2_name": None
-    }
+    conn = get_db()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        INSERT INTO rooms (room_code, player1_id, player1_name, player2_id, player2_name)
+        VALUES (?, ?, ?, ?, ?)
+    """, (
+        room_code,
+        session["user_id"],
+        session["username"],
+        None,
+        None
+    ))
+
+    conn.commit()
+    conn.close()
 
     return redirect(url_for("game", room_code=room_code))
 
@@ -124,12 +148,34 @@ def join_room_route():
 
     room_code = request.form["room_code"].upper()
 
-    if room_code not in rooms:
+    conn = get_db()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT * FROM rooms WHERE room_code = ?", (room_code,))
+    room = cursor.fetchone()
+
+    if not room:
+        conn.close()
         flash("Room not found.")
         return redirect(url_for("menu"))
 
-    rooms[room_code]["player2_id"] = session["user_id"]
-    rooms[room_code]["player2_name"] = session["username"]
+    if room["player2_id"] is not None:
+        conn.close()
+        flash("Room is already full.")
+        return redirect(url_for("menu"))
+
+    cursor.execute("""
+        UPDATE rooms
+        SET player2_id = ?, player2_name = ?
+        WHERE room_code = ?
+    """, (
+        session["user_id"],
+        session["username"],
+        room_code
+    ))
+
+    conn.commit()
+    conn.close()
 
     return redirect(url_for("game", room_code=room_code))
 
@@ -139,17 +185,25 @@ def game(room_code):
     if "user_id" not in session:
         return redirect(url_for("login"))
 
-    if room_code not in rooms:
+    conn = get_db()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT * FROM rooms WHERE room_code = ?", (room_code,))
+    room = cursor.fetchone()
+    conn.close()
+
+    if not room:
         flash("Room not found.")
         return redirect(url_for("menu"))
 
-    room = rooms[room_code]
+    game_ready = room["player1_id"] is not None and room["player2_id"] is not None
 
     return render_template(
         "index.html",
         username=session["username"],
         room_code=room_code,
-        room=room
+        room=room,
+        game_ready=game_ready
     )
 
 
@@ -161,14 +215,46 @@ def logout():
 
 @socketio.on("join_game_room")
 def handle_join_game_room(data):
-    room = data["room"]
-    join_room(room)
-    emit("player_joined", {"message": "Player joined room"}, room=room)
+    room_code = data["room"]
+
+    join_room(room_code)
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT * FROM rooms WHERE room_code = ?", (room_code,))
+    room = cursor.fetchone()
+    conn.close()
+
+    if room:
+        game_ready = room["player1_id"] is not None and room["player2_id"] is not None
+
+        emit("room_updated", {
+            "player1_name": room["player1_name"],
+            "player2_name": room["player2_name"],
+            "game_ready": game_ready
+        }, room=room_code)
 
 
 @socketio.on("pitch")
 def handle_pitch(data):
-    emit("receive_pitch", data, room=data["room"])
+    room_code = data["room"]
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT * FROM rooms WHERE room_code = ?", (room_code,))
+    room = cursor.fetchone()
+    conn.close()
+
+    if not room:
+        return
+
+    if room["player1_id"] is None or room["player2_id"] is None:
+        emit("waiting_for_player", {"message": "Wait for second player."})
+        return
+
+    emit("receive_pitch", data, room=room_code)
 
 
 @socketio.on("swing")
@@ -181,6 +267,31 @@ def handle_run_press(data):
     emit("receive_run_press", room=data["room"])
 
 
+@socketio.on("leave_game_room")
+def handle_leave_game_room(data):
+    room_code = data["room"]
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT * FROM rooms WHERE room_code = ?", (room_code,))
+    room = cursor.fetchone()
+
+    if not room:
+        conn.close()
+        return
+
+    emit("player_left_game", {}, room=room_code)
+
+    cursor.execute("DELETE FROM rooms WHERE room_code = ?", (room_code,))
+
+    conn.commit()
+    conn.close()
+
+@socketio.on("role_change")
+def handle_role_change(data):
+    emit("receive_role_change", data, room=data["room"], include_self=False)
+
 if __name__ == "__main__":
     init_db()
-    socketio.run(app, debug=True)
+    socketio.run(app, host="0.0.0.0", port=5000, debug=False)

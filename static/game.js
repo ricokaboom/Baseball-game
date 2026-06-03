@@ -11,6 +11,7 @@ runningBg.src = "/static/images/running_background.png";
 
 let myColor = null;
 
+
 if (MY_USER_ID === PLAYER1_ID) {
     myColor = "blue";
 }
@@ -24,6 +25,21 @@ socket.emit("join_game_room", {
     username: MY_USERNAME
 });
 
+let leavingGame = false;
+
+function leaveGame() {
+    if (leavingGame) return;
+    leavingGame = true;
+
+    socket.emit("leave_game_room", {
+        room: ROOM_CODE
+    });
+
+    setTimeout(function() {
+        window.location.href = "/menu";
+    }, 200);
+}
+
 let gameState = "pitching";
 
 let x = 100;
@@ -33,6 +49,7 @@ let speed = 2;
 let angle = 5;
 
 let ballMoving = false;
+let lastFrameTime = performance.now();
 
 let groundY = 620;
 let resetCounter = 0;
@@ -62,6 +79,10 @@ let runTimer = 0;
 let runCountdown = 180;
 let runningStarted = false;
 
+function isGameReady() {
+    return typeof gameReady !== "undefined" && gameReady === true;
+}
+
 function isMyTurnToPitch() {
     return (currentHitter === "red" && myColor === "blue") ||
            (currentHitter === "blue" && myColor === "red");
@@ -72,12 +93,24 @@ function isMyTurnToHit() {
 }
 
 function getBallSpeed() {
-    if (speed === 1) return 9;
-    if (speed === 2) return 13;
-    if (speed === 3) return 17;
+    if (speed === 1) return 540;
+    if (speed === 2) return 780;
+    if (speed === 3) return 1020;
 }
 
+socket.on("room_updated", function(data) {
+    if (data.game_ready !== gameReady) {
+        location.reload();
+    }
+});
+
+socket.on("player_left_game", function() {
+    window.location.href = "/menu";
+});
+
 socket.on("receive_pitch", function(data) {
+    if (!isGameReady()) return;
+
     resetBall();
     speed = data.speed;
     angle = data.angle;
@@ -87,6 +120,7 @@ socket.on("receive_pitch", function(data) {
 });
 
 socket.on("receive_swing", function(data) {
+    if (!isGameReady()) return;
     if (!ballMoving || swingChosen) return;
 
     let swingAngle = data.swingAngle;
@@ -124,9 +158,27 @@ socket.on("receive_swing", function(data) {
 });
 
 socket.on("receive_run_press", function() {
+    if (!isGameReady()) return;
+
     if (gameState === "running" && runningStarted) {
         runPresses++;
     }
+});
+
+socket.on("receive_role_change", function(data) {
+    currentHitter = data.currentHitter;
+    resultText = data.resultText;
+
+    strikes = 0;
+    balls = 0;
+    outs = 0;
+
+    resetBall();
+    gameState = "pitching";
+});
+
+socket.on("waiting_for_player", function(data) {
+    resultText = "WAITING FOR PLAYER 2";
 });
 
 function drawPlayers() {
@@ -152,9 +204,6 @@ function drawPlayers() {
 }
 
 function drawRoomAndNames() {
-
-    // ROOM ID
-    // ROOM ID
     ctx.fillStyle = "rgba(0, 0, 0, 0.65)";
     ctx.fillRect(650, 20, 320, 55);
 
@@ -166,8 +215,6 @@ function drawRoomAndNames() {
     ctx.font = "30px Arial";
     ctx.fillText("Room: " + ROOM_CODE, 700, 57);
 
-
-    // BLUE PLAYER NAME
     ctx.fillStyle = "rgba(0, 0, 0, 0.65)";
     ctx.fillRect(120, 640, 220, 45);
 
@@ -178,8 +225,6 @@ function drawRoomAndNames() {
     ctx.font = "26px Arial";
     ctx.fillText(PLAYER1_NAME, 140, 672);
 
-
-    // RED PLAYER NAME
     ctx.fillStyle = "rgba(0, 0, 0, 0.65)";
     ctx.fillRect(1280, 640, 260, 45);
 
@@ -188,10 +233,32 @@ function drawRoomAndNames() {
 
     ctx.fillStyle = "white";
     ctx.font = "26px Arial";
-    ctx.fillText(PLAYER2_NAME, 1300, 672);
+
+    if (PLAYER2_NAME && PLAYER2_NAME !== "None") {
+        ctx.fillText(PLAYER2_NAME, 1300, 672);
+    } else {
+        ctx.fillText("Waiting...", 1300, 672);
+    }
 }
+
+function drawWaitingScreen() {
+    ctx.fillStyle = "rgba(0, 0, 0, 0.75)";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.fillStyle = "white";
+    ctx.font = "55px Arial";
+    ctx.fillText("Waiting for second player...", 470, 330);
+
+    ctx.fillStyle = "yellow";
+    ctx.font = "45px Arial";
+    ctx.fillText("Room ID: " + ROOM_CODE, 610, 410);
+
+    ctx.fillStyle = "white";
+    ctx.font = "28px Arial";
+    ctx.fillText("Share this room code with Player 2", 560, 470);
+}
+
 function drawUI() {
-    // LEFT BOX: only pitcher sees angle/speed
     ctx.fillStyle = "rgba(0, 0, 0, 0.65)";
     ctx.fillRect(40, 45, 300, 175);
     ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
@@ -227,7 +294,6 @@ function drawUI() {
         ctx.fillText("Waiting...", 65, 120);
     }
 
-    // RESULT BOX
     if (resultText !== "") {
         ctx.fillStyle = "rgba(0, 0, 0, 0.65)";
         ctx.fillRect(570, 55, 560, 90);
@@ -240,7 +306,6 @@ function drawUI() {
         ctx.fillText(resultText, 610, 115);
     }
 
-    // RIGHT BOX: score/count
     ctx.fillStyle = "rgba(0, 0, 0, 0.65)";
     ctx.fillRect(1190, 45, 330, 285);
     ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
@@ -263,12 +328,12 @@ function drawUI() {
     ctx.fillText(blueScore, 1435, 240);
     ctx.fillText(redScore, 1435, 290);
 
-    // STRIKE ZONE
     ctx.strokeStyle = "yellow";
     ctx.lineWidth = 3;
     ctx.strokeRect(1300, 420, 80, 140);
     ctx.lineWidth = 1;
 }
+
 function resetBall() {
     x = 100;
     y = 520;
@@ -299,6 +364,12 @@ function switchRoles() {
     strikes = 0;
     balls = 0;
     outs = 0;
+
+    socket.emit("role_change", {
+        room: ROOM_CODE,
+        currentHitter: currentHitter,
+        resultText: resultText
+    });
 }
 
 function checkCountRules() {
@@ -399,7 +470,14 @@ function drawRunningScreen() {
     }
 }
 
-function animate() {
+function animate(currentTime) {
+    let deltaTime = (currentTime - lastFrameTime) / 1000;
+    lastFrameTime = currentTime;
+
+    if (deltaTime > 0.05) {
+        deltaTime = 0.05;
+    }
+
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     if (gameState === "running") {
@@ -414,8 +492,14 @@ function animate() {
     drawUI();
     drawRoomAndNames();
 
+    if (!isGameReady()) {
+        drawWaitingScreen();
+        requestAnimationFrame(animate);
+        return;
+    }
+
     if (ballMoving) {
-        x += getBallSpeed();
+        x += getBallSpeed() * deltaTime;
 
         let progress = (x - 100) / (hitterX - 100);
         let startY = 520;
@@ -473,23 +557,17 @@ function animate() {
                     resultText = "HIT! RUN!";
                     startRunningChallenge();
                 }
-            }
-
-            else if (swingChosen && swingResult === "TOO_EARLY") {
+            } else if (swingChosen && swingResult === "TOO_EARLY") {
                 strikes++;
                 resultText = "TOO EARLY!";
                 checkCountRules();
                 resetCounter = 60;
-            }
-
-            else if (swingChosen && swingResult === "MISS") {
+            } else if (swingChosen && swingResult === "MISS") {
                 strikes++;
                 resultText = "STRIKE!";
                 checkCountRules();
                 resetCounter = 60;
-            }
-
-            else {
+            } else {
                 if (inStrikeZone) {
                     strikes++;
                     resultText = "STRIKE!";
@@ -522,7 +600,23 @@ function animate() {
     requestAnimationFrame(animate);
 }
 
+
+
+
+
 document.addEventListener("keydown", function(event) {
+    if (event.key === "Escape") {
+        socket.emit("leave_game_room", {
+            room: ROOM_CODE
+        });
+
+        return;
+    }
+
+    if (!isGameReady()) {
+        return;
+    }
+
     if (gameState === "running") {
         if (isMyTurnToHit() && runningStarted && (event.key === "r" || event.key === "R")) {
             socket.emit("run_press", {
@@ -569,7 +663,7 @@ document.addEventListener("keydown", function(event) {
         }
     }
 });
-
 bg.onload = function() {
-    animate();
+    lastFrameTime = performance.now();
+    requestAnimationFrame(animate);
 };
