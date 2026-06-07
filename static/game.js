@@ -93,9 +93,9 @@ function isMyTurnToHit() {
 }
 
 function getBallSpeed() {
-    if (speed === 1) return 540;
-    if (speed === 2) return 780;
-    if (speed === 3) return 1020;
+    if (speed === 1) return 720;
+    if (speed === 2) return 1040;
+    if (speed === 3) return 1360;
 }
 
 socket.on("room_updated", function(data) {
@@ -182,13 +182,24 @@ socket.on("waiting_for_player", function(data) {
 });
 
 function drawPlayers() {
-    ctx.fillStyle = "blue";
+    let pitcherColor;
+    let hitterColor;
+
+    if (currentHitter === "red") {
+        pitcherColor = "blue";
+        hitterColor = "red";
+    } else {
+        pitcherColor = "red";
+        hitterColor = "blue";
+    }
+
+    ctx.fillStyle = pitcherColor;
     ctx.fillRect(180, 460, 40, 100);
     ctx.beginPath();
     ctx.arc(200, 440, 25, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.fillStyle = "red";
+    ctx.fillStyle = hitterColor;
     ctx.fillRect(1350, 450, 40, 110);
     ctx.beginPath();
     ctx.arc(1370, 430, 25, 0, Math.PI * 2);
@@ -204,6 +215,17 @@ function drawPlayers() {
 }
 
 function drawRoomAndNames() {
+    let pitcherName;
+    let hitterName;
+
+    if (currentHitter === "red") {
+        pitcherName = PLAYER1_NAME;
+        hitterName = PLAYER2_NAME;
+    } else {
+        pitcherName = PLAYER2_NAME;
+        hitterName = PLAYER1_NAME;
+    }
+
     ctx.fillStyle = "rgba(0, 0, 0, 0.65)";
     ctx.fillRect(650, 20, 320, 55);
 
@@ -216,14 +238,14 @@ function drawRoomAndNames() {
     ctx.fillText("Room: " + ROOM_CODE, 700, 57);
 
     ctx.fillStyle = "rgba(0, 0, 0, 0.65)";
-    ctx.fillRect(120, 640, 220, 45);
+    ctx.fillRect(120, 640, 260, 45);
 
     ctx.strokeStyle = "white";
-    ctx.strokeRect(120, 640, 220, 45);
+    ctx.strokeRect(120, 640, 260, 45);
 
     ctx.fillStyle = "white";
     ctx.font = "26px Arial";
-    ctx.fillText(PLAYER1_NAME, 140, 672);
+    ctx.fillText(pitcherName, 140, 672);
 
     ctx.fillStyle = "rgba(0, 0, 0, 0.65)";
     ctx.fillRect(1280, 640, 260, 45);
@@ -234,8 +256,8 @@ function drawRoomAndNames() {
     ctx.fillStyle = "white";
     ctx.font = "26px Arial";
 
-    if (PLAYER2_NAME && PLAYER2_NAME !== "None") {
-        ctx.fillText(PLAYER2_NAME, 1300, 672);
+    if (hitterName && hitterName !== "None") {
+        ctx.fillText(hitterName, 1300, 672);
     } else {
         ctx.fillText("Waiting...", 1300, 672);
     }

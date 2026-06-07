@@ -4,12 +4,9 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="91631ac9-3823-4ec5-b033-b7cf2bb506aa" name="Changes" comment="adding baseball rules">
-      <change afterPath="$PROJECT_DIR$/requirements.txt" afterDir="false" />
+    <list default="true" id="91631ac9-3823-4ec5-b033-b7cf2bb506aa" name="Changes" comment="now the role switching working but the color and nametag is not changing, and speed of ball match but need to make faster">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app.py" beforeDir="false" afterPath="$PROJECT_DIR$/app.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/static/game.js" beforeDir="false" afterPath="$PROJECT_DIR$/static/game.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/templates/index.html" beforeDir="false" afterPath="$PROJECT_DIR$/templates/index.html" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -75,11 +72,20 @@
       <option name="project" value="LOCAL" />
       <updated>1778713567188</updated>
     </task>
-    <option name="localTasksCounter" value="2" />
+    <task id="LOCAL-00002" summary="now the role switching working but the color and nametag is not changing, and speed of ball match but need to make faster">
+      <option name="closed" value="true" />
+      <created>1780470111232</created>
+      <option name="number" value="00002" />
+      <option name="presentableId" value="LOCAL-00002" />
+      <option name="project" value="LOCAL" />
+      <updated>1780470111232</updated>
+    </task>
+    <option name="localTasksCounter" value="3" />
     <servers />
   </component>
   <component name="VcsManagerConfiguration">
     <MESSAGE value="adding baseball rules" />
-    <option name="LAST_COMMIT_MESSAGE" value="adding baseball rules" />
+    <MESSAGE value="now the role switching working but the color and nametag is not changing, and speed of ball match but need to make faster" />
+    <option name="LAST_COMMIT_MESSAGE" value="now the role switching working but the color and nametag is not changing, and speed of ball match but need to make faster" />
   </component>
 </project>
